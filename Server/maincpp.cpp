@@ -13,14 +13,15 @@
 
 #define DEFAULT_PORT	"27015"
 #define BUFFER_LENGTH	1460
-#define CLIENTS_MAX		5
+#define CLIENTS_MAX		3
+#define g_sz_SORRY		"Error: слишком много подключений"
 
 INT n = 0; // количество активных клиентов
 SOCKET client_sockets[CLIENTS_MAX] = {};
 DWORD threadIDs[CLIENTS_MAX] = {};
 HANDLE hThreads[CLIENTS_MAX] = {};
 
-VOID HandleClient(SOCKET client_socket);
+VOID WINAPI HandleClient(SOCKET client_socket);
 
 using namespace std;
 
@@ -100,19 +101,35 @@ int main()
 	cout << "Acept client connections...." << endl;
 	do
 	{
-		client_sockets[n] = accept(listen_socket, NULL, NULL);
-		if (client_sockets[n] == INVALID_SOCKET)
+		SOCKET client_socket = accept(listen_socket, NULL, NULL);
+		//if (client_sockets[n] == INVALID_SOCKET)
+		//{
+		//	dwLastError = WSAGetLastError();
+		//	cout << "Accept failed with error: " << dwLastError << endl;
+		//	closesocket(listen_socket);
+		//	freeaddrinfo(result);
+		//	WSACleanup();
+		//	return dwLastError;
+		//}
+		////HandleClient(client_socket);
+		if (n < CLIENTS_MAX)
 		{
-			dwLastError = WSAGetLastError();
-			cout << "Accept failed with error: " << dwLastError << endl;
-			closesocket(listen_socket);
-			freeaddrinfo(result);
-			WSACleanup();
-			return dwLastError;
+			client_sockets[n] = client_socket;
+			hThreads[n] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)HandleClient, (LPVOID)client_sockets[n], 0, threadIDs + n);
+			n++;
 		}
-		//HandleClient(client_socket);
-		hThreads[n] = CreateThread(NULL, 0, HandleClient, client_sockets+n, 0, threadIDs+n);
-		n++;
+		else
+		{
+			CHAR recv_buffer[BUFFER_LENGTH] = {};
+			INT iResult = recv(client_socket, recv_buffer, BUFFER_LENGTH, 0);
+			if (iResult > 0)
+			{
+				cout << "Bytes received: " << iResult << endl;
+				cout << "Message: " << recv_buffer << endl;
+				INT iSendResult = send(client_socket, g_sz_SORRY,strlen(g_sz_SORRY),0);
+				closesocket(client_socket);
+			}
+		}
 	} while (true);
 
 
@@ -123,7 +140,7 @@ int main()
 	return dwLastError;
 }
 
-VOID HandleClient(SOCKET client_socket)
+VOID WINAPI HandleClient(SOCKET client_socket)
 {
 	INT iResult = 0;
 	DWORD dwLastError = 0;
