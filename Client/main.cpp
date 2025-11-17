@@ -77,7 +77,7 @@ int main()
 	CHAR send_buffer[BUFFER_LENGTH] = "Hello Server, I am client";
 	do
 	{
-		iResult = send(connect_socket, send_buffer, strlen(send_buffer), 0);
+		iResult = send(connect_socket, send_buffer, (int)strlen(send_buffer), 0);
 		if (iResult == SOCKET_ERROR)
 		{
 			dwLastError = WSAGetLastError();

@@ -15,12 +15,12 @@
 #define BUFFER_LENGTH	1460
 #define CLIENTS_MAX		5
 
-INT n = 0; // количество активных клиентов
+INT n = 0;
 SOCKET client_sockets[CLIENTS_MAX] = {};
 DWORD threadIDs[CLIENTS_MAX] = {};
 HANDLE hThreads[CLIENTS_MAX] = {};
 
-VOID HandleClient(SOCKET client_socket);
+DWORD WINAPI  HandleClient(LPVOID client_socket_);
 
 using namespace std;
 
@@ -72,7 +72,7 @@ int main()
 	}
 
 	//4) Bind socket
-	iResult = bind(listen_socket, result->ai_addr, result->ai_addrlen);
+	iResult = bind(listen_socket, result->ai_addr, (int)result->ai_addrlen);
 	if (iResult == SOCKET_ERROR)
 	{
 		dwLastError = WSAGetLastError();
@@ -111,9 +111,9 @@ int main()
 			return dwLastError;
 		}
 		//HandleClient(client_socket);
-		hThreads[n] = CreateThread(NULL, 0, HandleClient, client_sockets+n, 0, threadIDs+n);
+		hThreads[n] = CreateThread(NULL, 0, HandleClient, client_sockets + n, 0, threadIDs + n);
 		n++;
-	} while (true);
+	} while (n <= CLIENTS_MAX);
 
 
 
@@ -123,22 +123,38 @@ int main()
 	return dwLastError;
 }
 
-VOID HandleClient(SOCKET client_socket)
+DWORD WINAPI  HandleClient(LPVOID client_socket_)
 {
 	INT iResult = 0;
 	DWORD dwLastError = 0;
+	SOCKET* client_socket = (SOCKET*)client_socket_;
 	//7) получение запросов от клиента
 	do
 	{
-		CHAR send_buffer[BUFFER_LENGTH] = "Привет клиент";
+		CHAR separator_buffer[BUFFER_LENGTH] = "{-----------------------------------------------------}";
 		CHAR recv_buffer[BUFFER_LENGTH] = {};
 		INT iSendResult = 0;
 
-		iResult = recv(client_socket, recv_buffer, BUFFER_LENGTH, 0);
+		////////////////////////////////////////////////
+		SOCKADDR_IN addr;
+		int addrSize = sizeof(addr);
+
+		cout << separator_buffer << endl;
+
+
+		////////////////////////////////////////////////
+		iResult = recv(*client_socket, recv_buffer, BUFFER_LENGTH, 0);
+		if (getpeername(*client_socket, (SOCKADDR*)&addr, &addrSize) == 0) {
+			char ipStr[INET_ADDRSTRLEN];
+			inet_ntop(AF_INET, &addr.sin_addr, ipStr, INET_ADDRSTRLEN);
+			printf("IP: %s\n", ipStr);
+			int port = ntohs(addr.sin_port);
+			printf("Port: %d\n", port);
+		}
 		if (iResult > 0)
 		{
 			cout << iResult << " Bytes received, Message: " << recv_buffer << endl;
-			iSendResult = send(client_socket, recv_buffer, strlen(recv_buffer), 0);
+			iSendResult = send(*client_socket, recv_buffer, (int)strlen(recv_buffer), 0);
 			if (iSendResult == SOCKET_ERROR)
 			{
 				dwLastError = WSAGetLastError();
@@ -147,13 +163,20 @@ VOID HandleClient(SOCKET client_socket)
 			}
 			cout << "Byte sent: " << iSendResult << endl;
 		}
-		else if (iResult == 0) cout << "Connection closing" << endl;
+		else if (iResult == 0)
+		{
+			n--;
+			cout << "Connection closing" << endl;
+		}
+
 		else
 		{
 			dwLastError = WSAGetLastError();
 			cout << "Receive failed with error: " << dwLastError << endl;
+			cout << "Connection closing" << endl;
 			break;
 		}
 	} while (iResult > 0);
-	closesocket(client_socket);
+	closesocket(*client_socket);
+	return 0;
 }
