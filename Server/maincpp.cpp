@@ -165,6 +165,22 @@ VOID Shift(INT start)
 	n--;
 }
 
+BOOL SendForAllUsers(CHAR buffer[])
+{
+	for (int i = 0; i < n; i++)
+	{
+		int result = send(client_sockets[i], buffer, strlen(buffer), 0);
+		if (result == SOCKET_ERROR)
+		{
+			result = WSAGetLastError();
+			cout << "Send failed with error: " << WSAGetLastError() << endl;
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
 
 VOID WINAPI HandleClient(SOCKET client_socket)
 {
@@ -174,14 +190,18 @@ VOID WINAPI HandleClient(SOCKET client_socket)
 	getpeername(client_socket, (SOCKADDR*)&peer, &address_LENGTH);
 	inet_ntop(AF_INET, &peer.sin_addr, address, address_LENGTH);
 	INT port = ((peer.sin_port & 0xFF) << 8) + (peer.sin_port >> 8);
-	cout << address << ":" << port << endl;
+	cout << "A new user has been connected { "
+		<< address << " : " << port
+		<< "} count users : " << n << " / " << CLIENTS_MAX
+		<< " ( free slots : " << CLIENTS_MAX - n << " )"
+		<< endl;
 	/////////////////////////////////////
 	INT iResult = 0;
 	DWORD dwLastError = 0;
 	//7) получение запросов от клиента
 	CHAR send_buffer[BUFFER_LENGTH] = "ѕривет клиент";
 	CHAR recv_buffer[BUFFER_LENGTH] = {};
-	
+
 
 	do
 	{
@@ -191,14 +211,18 @@ VOID WINAPI HandleClient(SOCKET client_socket)
 		iResult = recv(client_socket, recv_buffer, BUFFER_LENGTH, 0);
 		if (iResult > 0)
 		{
-			cout << iResult << " Bytes received from " << address << ":" << port << "-" << recv_buffer << endl;
-			iSendResult = send(client_socket, recv_buffer, strlen(recv_buffer), 0);
-			if (iSendResult == SOCKET_ERROR)
+			cout << iResult << " Bytes received from " << address << ":" << port << " - " << recv_buffer << endl;
+			if (!SendForAllUsers(recv_buffer))
 			{
-				dwLastError = WSAGetLastError();
-				cout << "Send failed with error: " << dwLastError << endl;
-				break;
+				cout << "ERROR WITH SEND" << endl;
 			}
+			//iSendResult = send(client_socket, recv_buffer, strlen(recv_buffer), 0);
+			//if (iSendResult == SOCKET_ERROR)
+			//{
+			//	dwLastError = WSAGetLastError();
+			//	cout << "Send failed with error: " << dwLastError << endl;
+			//	break;
+			//}
 			cout << "Byte sent: " << iSendResult << endl;
 		}
 		else if (iResult == 0) cout << "Connection closing" << endl;
@@ -211,9 +235,10 @@ VOID WINAPI HandleClient(SOCKET client_socket)
 	} while (iResult > 0 && !strstr(recv_buffer, "quit"));
 	DWORD dwID = GetCurrentThreadId();
 	Shift(GetSlotIndex(dwID));
-	cout << address << ":" << port << " leaved" << endl;
+	cout << address << ":" << port << " leaved"
+		<< "count users : " << n << " / " << CLIENTS_MAX
+		<< " ( free slots : " << CLIENTS_MAX - n << " )"
+		<< endl;
 	ExitThread(0);
 	closesocket(client_socket);
-
-
 }

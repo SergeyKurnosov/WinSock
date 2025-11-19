@@ -7,6 +7,7 @@
 #include<WinSock2.h>
 #include<ws2tcpip.h>
 #include<iphlpapi.h>
+#include<thread>
 #include<iostream>
 using namespace std;
 
@@ -14,6 +15,27 @@ using namespace std;
 
 #define DEFAULT_PORT	"27015"
 #define BUFFER_LENGTH	1460
+bool flag_recv = true;
+
+VOID recv_while(INT iResult, SOCKET connect_socket, CHAR recv_buffer[])
+{
+	do
+	{
+		iResult = recv(connect_socket, recv_buffer, BUFFER_LENGTH, 0);
+		if (iResult > 0)
+		{
+			cout << iResult << " Bytes received, Message:\t" << recv_buffer << ".\n";
+			cout << "\nВведите сообщение: \n";
+			ZeroMemory(recv_buffer, BUFFER_LENGTH);
+		}
+		else if (iResult == 0) cout << "Connection closed" << endl;
+		else
+		{
+			DWORD error = WSAGetLastError();
+			cout << "Receive failed with error: " << error << endl;
+		}
+	} while (flag_recv);
+}
 
 int main()
 {
@@ -41,7 +63,7 @@ int main()
 	hints.ai_protocol = IPPROTO_TCP;
 
 	//2) задаем информацию о сервере к которому будем подключаться 
-	iResult = getaddrinfo("192.168.100.104", DEFAULT_PORT, &hints, &result);
+	iResult = getaddrinfo("127.0.0.1", DEFAULT_PORT, &hints, &result);
 	if (iResult != 0)
 	{
 		cout << "getaddrinfo failed: " << iResult << endl;
@@ -75,6 +97,8 @@ int main()
 
 	//5) отправляем данные на сервер
 	CHAR send_buffer[BUFFER_LENGTH] = "Hello Server, I am client";
+	CHAR recv_buffer[BUFFER_LENGTH] = {};
+	thread rreeccvv(recv_while, iResult, connect_socket, recv_buffer);
 	do
 	{
 		iResult = send(connect_socket, send_buffer, strlen(send_buffer), 0);
@@ -87,28 +111,24 @@ int main()
 			WSACleanup();
 			return dwLastError;
 		}
-		cout << iResult << " Bytes send" << endl;
+		cout << iResult << " Bytes sent" << endl;
 
-		//6) ожидаем ответ от сервера
-		CHAR recv_buffer[BUFFER_LENGTH] = {};
-		//do
-		{
-			iResult = recv(connect_socket, recv_buffer, BUFFER_LENGTH, 0);
-			if (iResult > 0)cout << iResult << " Bytes received, Message:\t" << recv_buffer << ".\n";
-			else if (iResult == 0)cout << "Connection closed" << endl;
-			else cout << "Receive failed with error: " << WSAGetLastError() << endl;
-		} //while (iResult > 0);
-		//////////////////////////////////////
+		//6)Ожидаем ответ от Сервера:
+		// 
+		/////////////////////////////////////////////
 		ZeroMemory(send_buffer, BUFFER_LENGTH);
-		cout << "Введите сообщение: ";
+		//cout << "\nВведите сообщение: \n";
+		
 		SetConsoleCP(1251);
 		cin.getline(send_buffer, BUFFER_LENGTH);
 		SetConsoleCP(866);
 	} while (strstr(send_buffer, "exit") == 0 && strstr(send_buffer, "quit") == 0);
-//	} while (strcmp(send_buffer, "exit") != 0 && strcmp(send_buffer, "quit") != 0);
+	flag_recv = false;
+	//	} while (strcmp(send_buffer, "exit") != 0 && strcmp(send_buffer, "quit") != 0);
 
-	//7) Disconnect client / отключение сервера
+		//7) Disconnect client / отключение сервера
 	send(connect_socket, "quit", 4, 0);
+	rreeccvv.join();
 	iResult = shutdown(connect_socket, SD_SEND);
 	if (iResult == SOCKET_ERROR)
 	{
